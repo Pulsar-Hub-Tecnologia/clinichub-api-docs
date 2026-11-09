@@ -1,0 +1,505 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "API pública do ClinicHub",
+    "version": "1.0.0",
+    "description": "Crie contatos e oportunidades no CRM do ClinicHub a partir de outros sistemas: o formulário do seu site, uma landing page, uma planilha ou outro CRM.\n\n## Autenticação\n\nToda chamada leva uma **chave de API** do workspace. Para gerar uma:\n\n1. Entre no ClinicHub com um usuário **Proprietário** ou **Administrador**.\n2. Abra **Configurações › Chaves de API** e clique em **Nova chave**.\n3. Copie a chave (começa com `ch_`). Ela aparece **uma única vez**; se perder, revogue e gere outra.\n\nEnvie a chave em um destes cabeçalhos:\n\n```\nX-API-Key: ch_sua_chave\n```\n\n```\nAuthorization: Bearer ch_sua_chave\n```\n\nA chave dá acesso aos dados do workspace inteiro. Guarde-a no servidor da sua integração e **nunca** a coloque em código que roda no navegador ou no celular de quem usa o seu site: chame esta API a partir do seu back-end.\n\nA mesma chave também autentica o servidor MCP do ClinicHub (`/mcp`).\n\n## Requisitos\n\nO workspace precisa ter o módulo **CRM** contratado. Sem ele, as rotas respondem `402`.\n\n## Contatos duplicados\n\nO ClinicHub não cria dois contatos para a mesma pessoa. Se já existir um contato com o mesmo e-mail (ou, quando o e-mail não é enviado, com o mesmo telefone, com ou sem DDI e nono dígito), a API devolve esse contato com `existed: true` e status `200`, em vez de criar outro. Por isso é seguro reenviar o mesmo lead.\n\n## Onde encontrar os IDs\n\nEtapa do funil, etiquetas, origens, responsáveis, serviços e planos são identificados por UUID. Para descobrir os IDs do seu workspace, use as ferramentas de consulta do servidor MCP com a mesma chave (`list_funnels`, `get_funnel_details`, `list_tags`, `list_origins`, `list_deal_owners`, `get_services`, `get_protocol_and_plans`). Todos esses campos são opcionais: sem eles, a oportunidade entra na primeira etapa do funil mais recente, sem responsável e sem origem.\n\n## Erros\n\nToda resposta de erro traz `message`, em português, pronta para registrar no log da sua integração. Erros de validação trazem também `errors`, com o campo e o motivo de cada falha. Recusas do cadastro de contato trazem `reason` (`invalid_name`, `invalid_phone`, `invalid_email`, `missing_channel`).\n\n| Status | Quando |\n|---|---|\n| `400` | Corpo inválido: campo obrigatório ausente, tipo errado, formato inválido. |\n| `401` | Chave ausente, inválida ou revogada. |\n| `402` | O workspace não tem o módulo CRM contratado. |\n| `403` | O responsável (`user_id`) não pode responder por oportunidades. |\n| `404` | Um ID enviado não existe neste workspace (contato, paciente, etapa, serviço...). |\n| `500` | Erro inesperado. Tente de novo; se persistir, fale com o suporte. |"
+  },
+  "servers": [
+    {
+      "url": "https://clinichub.pulsarhub.api.br",
+      "description": "Produção"
+    }
+  ],
+  "security": [
+    { "ApiKeyHeader": [] },
+    { "BearerApiKey": [] }
+  ],
+  "tags": [
+    { "name": "Contatos", "description": "Pessoas no CRM da clínica." },
+    { "name": "Oportunidades", "description": "Negociações no funil de vendas." }
+  ],
+  "paths": {
+    "/external/contacts": {
+      "post": {
+        "tags": ["Contatos"],
+        "operationId": "createContact",
+        "summary": "Criar contato",
+        "description": "Cria um contato no CRM, com situação inicial `LEAD`. Informe telefone e/ou e-mail. Se já existir contato com o mesmo canal, devolve o existente com `existed: true` e status `200`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContactInput" },
+              "examples": {
+                "completo": {
+                  "summary": "Lead do formulário do site",
+                  "value": {
+                    "name": "Maria Souza",
+                    "phone": "(85) 99999-1234",
+                    "email": "maria@exemplo.com",
+                    "status": "LEAD",
+                    "tag_ids": ["3f6b2c1e-8a4d-4f0b-9c2e-5d7a1b8e4f60"]
+                  }
+                },
+                "so-telefone": {
+                  "summary": "Só nome e telefone",
+                  "value": {
+                    "name": "João Lima",
+                    "phone": "5585988887777"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contato criado.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContactResult" },
+                "example": {
+                  "existed": false,
+                  "contact": {
+                    "id": "9a1c4e7b-2d3f-4a5b-8c6d-0e1f2a3b4c5d",
+                    "name": "Maria Souza",
+                    "phone": "85999991234",
+                    "email": "maria@exemplo.com",
+                    "origin": "MANUAL",
+                    "status": "LEAD",
+                    "tags": [
+                      { "id": "3f6b2c1e-8a4d-4f0b-9c2e-5d7a1b8e4f60", "name": "Site", "color": "#3B82F6" }
+                    ],
+                    "access_patient_id": null,
+                    "patient": null,
+                    "created_at": "2026-10-27T14:00:00.000Z",
+                    "updated_at": "2026-10-27T14:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Já havia contato com o mesmo canal: é ele que volta, sem alterações.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContactResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "cURL",
+            "source": "curl -X POST https://clinichub.pulsarhub.api.br/external/contacts \\\n  -H \"X-API-Key: ch_sua_chave\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"name\": \"Maria Souza\", \"phone\": \"(85) 99999-1234\", \"email\": \"maria@exemplo.com\"}'"
+          }
+        ]
+      }
+    },
+    "/external/deals": {
+      "post": {
+        "tags": ["Oportunidades"],
+        "operationId": "createDeal",
+        "summary": "Criar oportunidade",
+        "description": "Cria uma oportunidade para **uma** pessoa, informada de um destes três jeitos (exatamente um):\n\n- `contact_id`: um contato que já existe;\n- `access_patient_id`: um paciente da clínica;\n- `contact`: os dados de um contato novo, com as mesmas regras de `POST /external/contacts` (se já existir contato com o mesmo canal, ele é reaproveitado).\n\nSe o contato for de um paciente ativo na clínica, a oportunidade fica no paciente (`linked_as: \"patient\"`).\n\nSem `funnel_step_id`, a oportunidade entra na primeira etapa do funil `funnel_id` ou, sem ele, do funil mais recente do workspace. Workspace sem nenhum funil responde `404`.\n\nO valor é a soma dos itens (`products`) quando eles vêm; senão, `value`. O preço de cada item é o enviado ou, sem ele, o do catálogo (para planos, a soma das etapas).\n\nContato e oportunidade não são gravados juntos: se a oportunidade for recusada (por exemplo, uma etapa que não existe), o contato enviado em `contact` já terá sido criado. Corrija e reenvie: ele é reaproveitado, não duplicado.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DealInput" },
+              "examples": {
+                "contato-novo": {
+                  "summary": "Lead novo com oportunidade, numa chamada só",
+                  "value": {
+                    "name": "Implante dentário",
+                    "contact": {
+                      "name": "Maria Souza",
+                      "phone": "(85) 99999-1234",
+                      "email": "maria@exemplo.com"
+                    },
+                    "funnel_step_id": "5e8f1a2b-3c4d-4e5f-a6b7-c8d9e0f1a2b3",
+                    "origin_id": "4a5b6c7d-8e9f-4a0b-9c1d-2e3f4a5b6c7d",
+                    "description": "Pediu orçamento pelo site."
+                  }
+                },
+                "contato-existente": {
+                  "summary": "Contato que já existe, com itens e responsável",
+                  "value": {
+                    "name": "Clareamento + limpeza",
+                    "contact_id": "9a1c4e7b-2d3f-4a5b-8c6d-0e1f2a3b4c5d",
+                    "funnel_id": "7b9c1d2e-3f4a-4b5c-8d6e-9f0a1b2c3d4e",
+                    "user_id": "6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f",
+                    "expected_close_date": "2026-11-30",
+                    "products": [
+                      { "service_id": "1d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a", "quantity": 1, "price": 450 }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Oportunidade criada.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DealResult" },
+                "example": {
+                  "deal": {
+                    "id": "c2d4e6f8-1a3b-4c5d-9e7f-8a0b1c2d3e4f",
+                    "name": "Implante dentário",
+                    "description": "Pediu orçamento pelo site.",
+                    "status": "INPROGRESS",
+                    "value": 0,
+                    "funnel_step_id": "5e8f1a2b-3c4d-4e5f-a6b7-c8d9e0f1a2b3",
+                    "contact_id": "9a1c4e7b-2d3f-4a5b-8c6d-0e1f2a3b4c5d",
+                    "access_patient_id": null,
+                    "user_id": null,
+                    "origin_id": "4a5b6c7d-8e9f-4a0b-9c1d-2e3f4a5b6c7d",
+                    "service_id": null,
+                    "plan_id": null,
+                    "expected_close_date": null,
+                    "created_at": "2026-10-27T14:00:00.000Z"
+                  },
+                  "linked_as": "contact",
+                  "contact": { "id": "9a1c4e7b-2d3f-4a5b-8c6d-0e1f2a3b4c5d", "existed": false }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "403": {
+            "description": "O responsável (`user_id`) não pode responder por oportunidades: só Proprietário, Administrador e Secretária.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "cURL",
+            "source": "curl -X POST https://clinichub.pulsarhub.api.br/external/deals \\\n  -H \"Authorization: Bearer ch_sua_chave\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"name\": \"Implante dentário\", \"contact\": {\"name\": \"Maria Souza\", \"phone\": \"(85) 99999-1234\"}}'"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Chave de API do workspace (Configurações › Chaves de API)."
+      },
+      "BearerApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A mesma chave de API, no cabeçalho `Authorization: Bearer ch_...`."
+      }
+    },
+    "schemas": {
+      "ContactInput": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Nome do contato."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Telefone, com ou sem máscara e DDI. É gravado só com os dígitos (8 a 15). Informe `phone` e/ou `email`.",
+            "example": "(85) 99999-1234"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "description": "E-mail. É gravado em minúsculas."
+          },
+          "status": { "$ref": "#/components/schemas/ContactStatus" },
+          "tag_ids": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "type": "string", "format": "uuid" },
+            "description": "Etiquetas do CRM a aplicar no contato."
+          }
+        }
+      },
+      "ContactStatus": {
+        "type": "string",
+        "enum": ["LEAD", "PROSPECT", "QUALIFIED", "NEGOTIATION", "INACTIVE"],
+        "default": "LEAD",
+        "description": "Situação da pessoa no funil."
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "phone": { "type": "string", "nullable": true, "description": "Só dígitos." },
+          "email": { "type": "string", "nullable": true },
+          "origin": {
+            "type": "string",
+            "enum": ["MANUAL", "IMPORT", "PATIENT_ACCEPT", "CONVERSATION", "BACKFILL"],
+            "description": "Como o contato entrou no CRM."
+          },
+          "status": { "$ref": "#/components/schemas/ContactStatus" },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "name": { "type": "string" },
+                "color": { "type": "string", "nullable": true }
+              }
+            }
+          },
+          "access_patient_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Paciente da clínica a quem o contato pertence, quando houver."
+          },
+          "patient": {
+            "type": "object",
+            "nullable": true,
+            "description": "Vínculo com o paciente, quando o contato é de um paciente e o workspace tem prontuário.",
+            "properties": {
+              "access_patient_id": { "type": "string", "format": "uuid" },
+              "status": { "type": "string" },
+              "archived": { "type": "boolean" },
+              "invite_sent": { "type": "boolean" },
+              "activated_without_invite": { "type": "boolean" },
+              "name": { "type": "string", "nullable": true }
+            }
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ContactResult": {
+        "type": "object",
+        "required": ["existed", "contact"],
+        "properties": {
+          "existed": {
+            "type": "boolean",
+            "description": "`true` quando o contato já existia e foi reaproveitado."
+          },
+          "contact": { "$ref": "#/components/schemas/Contact" }
+        }
+      },
+      "DealProductInput": {
+        "type": "object",
+        "description": "Um item: informe `service_id` OU `plan_id`.",
+        "properties": {
+          "service_id": { "type": "string", "format": "uuid" },
+          "plan_id": { "type": "string", "format": "uuid" },
+          "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Preço unitário. Sem ele, vale o do catálogo."
+          }
+        }
+      },
+      "DealInput": {
+        "type": "object",
+        "required": ["name"],
+        "description": "Informe exatamente um entre `contact_id`, `access_patient_id` e `contact`.",
+        "properties": {
+          "name": { "type": "string", "description": "Título da oportunidade." },
+          "contact_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Contato que já existe no CRM."
+          },
+          "access_patient_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Paciente da clínica."
+          },
+          "contact": {
+            "allOf": [{ "$ref": "#/components/schemas/ContactInput" }],
+            "description": "Contato novo, criado (ou reaproveitado) junto com a oportunidade."
+          },
+          "funnel_step_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Etapa inicial. Sem ela, a primeira etapa de `funnel_id` ou do funil mais recente."
+          },
+          "funnel_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Funil de onde tirar a etapa inicial, quando `funnel_step_id` não vier."
+          },
+          "description": { "type": "string" },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Valor da oportunidade. Ignorado quando `products` vem."
+          },
+          "expected_close_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Data prevista de fechamento (AAAA-MM-DD)."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Responsável: um Proprietário, Administrador ou Secretária do workspace."
+          },
+          "origin_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Origem do CRM (ex.: Site, Instagram)."
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Produto único: um serviço. Use `service_id` OU `plan_id`, ou então `products`."
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Produto único: um plano ou protocolo."
+          },
+          "products": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "#/components/schemas/DealProductInput" },
+            "description": "Itens da oportunidade. Definem o valor total e o produto principal (o primeiro)."
+          }
+        }
+      },
+      "Deal": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "status": {
+            "type": "string",
+            "enum": ["INPROGRESS", "WON", "LOST", "ARCHIVED", "FROZEN"]
+          },
+          "value": { "type": "number" },
+          "funnel_step_id": { "type": "string", "format": "uuid" },
+          "contact_id": { "type": "string", "format": "uuid", "nullable": true },
+          "access_patient_id": { "type": "string", "format": "uuid", "nullable": true },
+          "user_id": { "type": "string", "format": "uuid", "nullable": true },
+          "origin_id": { "type": "string", "format": "uuid", "nullable": true },
+          "service_id": { "type": "string", "format": "uuid", "nullable": true },
+          "plan_id": { "type": "string", "format": "uuid", "nullable": true },
+          "expected_close_date": { "type": "string", "format": "date", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DealResult": {
+        "type": "object",
+        "required": ["deal", "linked_as", "contact"],
+        "properties": {
+          "deal": { "$ref": "#/components/schemas/Deal" },
+          "linked_as": {
+            "type": "string",
+            "enum": ["contact", "patient"],
+            "description": "Onde a oportunidade ficou: no contato ou no paciente."
+          },
+          "contact": {
+            "type": "object",
+            "nullable": true,
+            "description": "Preenchido quando a chamada enviou `contact`: o contato criado ou reaproveitado.",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "existed": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string", "description": "O que deu errado, em português." },
+          "reason": {
+            "type": "string",
+            "description": "Código do motivo, quando o cadastro de contato recusa (`invalid_phone`, `missing_channel`...)."
+          },
+          "errors": {
+            "type": "array",
+            "description": "Falhas de validação, uma por campo.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string", "example": "contact.name" },
+                "message": { "type": "string", "example": "é obrigatório" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Corpo inválido.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": {
+              "message": "name: é obrigatório",
+              "errors": [{ "field": "name", "message": "é obrigatório" }]
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Chave de API ausente, inválida ou revogada.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "message": "API Key inválida." }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "O workspace não tem o módulo CRM contratado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "message": "Este recurso faz parte de um módulo que não está contratado." }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Um ID enviado não existe neste workspace.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "message": "Etapa do funil não encontrada neste workspace." }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Erro inesperado.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}

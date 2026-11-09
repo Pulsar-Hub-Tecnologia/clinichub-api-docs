@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API pública do ClinicHub</title>
+    <meta
+      name="description"
+      content="Crie contatos e oportunidades no CRM do ClinicHub a partir de outros sistemas."
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Renderiza o openapi.json desta pasta. Redoc com versão fixa e hash de
+         integridade (SRI, conferido contra o tarball do npm): se o arquivo do
+         CDN mudar, o navegador recusa o script em vez de executar outro. Ao
+         trocar a versão, recalcule:
+         curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
+    <redoc
+      spec-url="openapi.json"
+      hide-hostname="false"
+      path-in-middle-panel="true"
+      required-props-first="true"
+      expand-responses="201"
+    ></redoc>
+    <script
+      src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"
+      integrity="sha384-0GrsyTQc9Oqd8h+b2dbc4XdR2T/DYpy0tLNNstyx+LBMUyiBbcWPbEs9aRmUcaxD"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>
